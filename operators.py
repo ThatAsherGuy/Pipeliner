@@ -314,12 +314,23 @@ class PIPELINER_OT_MeshExport(bpy.types.Operator):
         ('AUTO', "Auto Export", "Exports objects from the auto-list")
     ]
 
+    export_target: bpy.props.EnumProperty(
+        items=[
+            ('OBJECTS', "Objects", "Treat the selected objects as export targets"),
+            ('COLLECTIONS', "Collections", "Treat the selected collections as export targets"),
+            ('COLLECTION_CONTENTS', "Collection Contents", "Treat the objects inside selected collections as export targets"),
+        ],
+        name="Export Targets",
+        description="Wether to export individual objects, individual COLOR_01 collections, or individual objects from COLOR_01 collections",
+        default='OBJECTS'
+    )
+
     export_mode: bpy.props.EnumProperty(
         items=export_mode_items,
         name="Export Mode",
         description="What kind of export to run",
         default='SELECTED',
-        options={'HIDDEN'}
+        # options={'HIDDEN'}
     )
 
     use_overrides: bpy.props.BoolProperty(
@@ -447,36 +458,89 @@ class PIPELINER_OT_MeshExport(bpy.types.Operator):
             self.report({'WARNING'}, "You fucking broke it.")
             return {'CANCELLED'}
 
-        target_objs = context.selected_objects
+        targets = []
 
-        for obj in target_objs:
+        limit_to_selected = True
+        do_collection = False
+
+        if self.export_target == 'OBJECTS':
+            targets = context.selected_objects
+        else:
+            if self.export_target == 'COLLECTIONS':
+                limit_to_selected = False
+                do_collection = True          
+                for thing in context.view_layer.layer_collection.children:
+                    if thing.collection.color_tag == 'COLOR_01':
+                        targets.append(thing)
+            else:
+                for thing in context.view_layer.layer_collection.children:
+                    if thing.collection.color_tag == 'COLOR_01':
+                        targets += [obj for obj in thing.collection.all_objects]
+
+        for target in targets:
             bpy.ops.object.select_all(action='DESELECT')
-            obj.select_set(True)
+            if self.export_target == 'COLLECTIONS':
+                context.view_layer.active_layer_collection = target
+                target = target.collection # Layer collection shit.
+            else:
+                target.select_set(True)
+
+            if target.PIPE.export_mode == 'NO_EXPORT':
+                continue
 
             if self.use_overrides:
-                if obj.PIPE.use_overrides:
-                    exp = obj.PIPE
+                if target.PIPE.use_overrides:
+                    exp = target.PIPE
                 else:
                     exp = self
             else:
                 exp = self
 
-            file_name = obj.name + ".fbx"
+            file_name = target.name + ".fbx"
             full_path = os.path.join(target_dir, file_name)
 
             mods = []
 
             if exp.triangulate:
-                mod = obj.modifiers.new("triangulate", 'TRIANGULATE')
-                mod.keep_custom_normals = True
-                mods.append(mod)
+                if self.export_target == 'COLLECTIONS':
+                    obj_list = [obj for obj in target.objects if obj.type in {'MESH', 'CURVE'}]
+                    for obj in obj_list:
+                        obj_mods = []
+                        mod = obj.modifiers.new("triangulate", 'TRIANGULATE')
+                        if mod:
+                            mod.keep_custom_normals = True
+                            obj_mods.append(mod)
+                            mods.append(obj_mods)
+                else:
+                    mod = target.modifiers.new("triangulate", 'TRIANGULATE')
+                    if mod:
+                        mod.keep_custom_normals = True
+                        mods.append(mod)
+
+            if self.export_target == 'COLLECTIONS':
+                pass
+            else:
+                backup = target.matrix_world.copy()
+                loc = mathutils.Matrix.Translation(backup.to_translation())
+                rot = backup.to_quaternion().to_matrix().to_4x4()
+                export_mat = mathutils.Matrix.Identity(4)
+
+                if not exp.clear_loc:
+                    export_mat = export_mat @ loc
+
+                if not exp.clear_rot:
+                    export_mat = export_mat @ rot
+
+                target.matrix_world = export_mat
+
 
             bpy.ops.export_scene.fbx(
                 filepath=full_path,
                 check_existing=False, #Auto-overwrite
                 filter_glob='*.fbx',
 
-                use_selection=True, # So we can do some macro-selecting to ensure the right export group
+                use_selection=limit_to_selected,
+                use_active_collection= do_collection,
                 object_types={'EMPTY', 'MESH', 'OTHER'}, # So we can use empties as sockets/locators
 
                 apply_unit_scale=False,
@@ -484,7 +548,7 @@ class PIPELINER_OT_MeshExport(bpy.types.Operator):
                 use_space_transform=True,
 
                 use_mesh_modifiers=True,
-                use_mesh_modifiers_render=True,
+                # use_mesh_modifiers_render=True, # Turns out this one doesn't do anything anymore.
                 mesh_smooth_type='FACE',
 
                 batch_mode='OFF', # Batches are created manually
@@ -494,7 +558,19 @@ class PIPELINER_OT_MeshExport(bpy.types.Operator):
                 bake_space_transform=False
             )
 
-            for mod in mods:
-                obj.modifiers.remove(mod)
+            if self.export_target == 'COLLECTIONS':
+                obj_list = [obj for obj in target.objects if obj.type in {'MESH', 'CURVE'}]
+                for i, obj in enumerate(obj_list):
+                    for mod in mods[i]:
+                        obj.modifiers.remove(mod)
+            else:
+                for mod in mods:
+                    target.modifiers.remove(mod)
+
+
+            if self.export_target == 'COLLECTIONS':
+                pass
+            else:
+                target.matrix_world = backup
 
         return {'FINISHED'}

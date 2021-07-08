@@ -37,6 +37,7 @@ from .properties import PIPELINER_ExportProps
 
 from .interface import PL_PT_MainPanel
 from .interface import PL_PT_ExportPanel
+from .interface import PL_PT_CollectionOverrides
 
 classes = (
     # Ops
@@ -50,7 +51,8 @@ classes = (
     PIPELINER_ExportProps,
     # UI
     PL_PT_MainPanel,
-    PL_PT_ExportPanel
+    PL_PT_ExportPanel,
+    PL_PT_CollectionOverrides
 )
 
 def register():
@@ -59,11 +61,13 @@ def register():
 
     bpy.types.Scene.PIPE = bpy.props.PointerProperty(type=PIPELINER_TaskProps)
     bpy.types.Object.PIPE = bpy.props.PointerProperty(type=PIPELINER_ExportProps)
+    bpy.types.Collection.PIPE = bpy.props.PointerProperty(type=PIPELINER_ExportProps)
 
 def unregister():
 
     del bpy.types.Scene.PIPE
     del bpy.types.Object.PIPE
+    del bpy.types.Collection.PIPE
 
     for cls in classes:
         bpy.utils.unregister_class(cls)
