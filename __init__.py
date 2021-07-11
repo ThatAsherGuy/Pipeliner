@@ -30,6 +30,7 @@ from .operators import PIPELINER_OT_SetDimensions
 from .operators import PIPELINER_OT_ChurnNext
 from .operators import PIPELINER_OT_SetChurnList
 from .operators import PIPELINER_OT_MeshExport
+from .operators import PIPELINER_OT_BulkExport
 from .operators import PIPELINER_OT_UVSetup
 
 from .properties import PIPELINER_File
@@ -46,6 +47,7 @@ classes = (
     PIPELINER_OT_ChurnNext,
     PIPELINER_OT_SetChurnList,
     PIPELINER_OT_MeshExport,
+    PIPELINER_OT_BulkExport,
     PIPELINER_OT_UVSetup,
     # Props
     PIPELINER_File,

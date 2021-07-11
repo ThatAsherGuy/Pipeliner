@@ -17,6 +17,7 @@ import bpy
 from bpy.props import BoolProperty, EnumProperty
 import mathutils
 import os
+import json
 
 
 class PIPELINER_OT_SetDimensions(bpy.types.Operator):
@@ -604,5 +605,140 @@ class PIPELINER_OT_UVSetup(bpy.types.Operator):
 
             layers[0].name = self.uv1_name
             layers.new(name=self.uv2_name, do_init=True)
+
+        return {'FINISHED'}
+
+class PIPELINER_OT_BulkExport(bpy.types.Operator):
+    bl_idname = "pipe.bulk_export"
+    bl_label = "Pipeliner: Bulk Export"
+    bl_description = "Churns through a list of external files, exports their contents, and generates a JSON manifest"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    # DIRECTORY STUFF
+    filename_ext = '.blend'
+    filter_glob: bpy.props.StringProperty(default='*.blend', options={'HIDDEN'})
+
+    files: bpy.props.CollectionProperty(name='Files', type=bpy.types.OperatorFileListElement)
+    directory: bpy.props.StringProperty(subtype='DIR_PATH')
+    filepath: bpy.props.StringProperty(
+        name="File Path",
+        description="Filepath used for importing the file",
+        maxlen=1024,
+        subtype='FILE_PATH',
+    )
+
+    color_items = [
+        ('COLOR_01', 'COLOR_01', "Red",    1),
+        ('COLOR_02', 'COLOR_02', "Orange", 2),
+        ('COLOR_03', 'COLOR_03', "Yellow", 4),
+        ('COLOR_04', 'COLOR_04', "Green",  8),
+        ('COLOR_05', 'COLOR_05', "Cyan",   16),
+        ('COLOR_06', 'COLOR_06', "Purple", 32),
+        ('COLOR_07', 'COLOR_07', "Pink",   64),
+        ('COLOR_08', 'COLOR_08', "Brown",  128),
+    ]
+
+    main_colors: bpy.props.EnumProperty(
+        items=color_items,
+        name="Main Collection Colors",
+        description="Collections with these colors will be treated as containing sets of 'primary' meshes",
+        options={'ENUM_FLAG'},
+        default={'COLOR_01'}
+    )
+
+    alt_colors: bpy.props.EnumProperty(
+        items=color_items,
+        name="Alt Collection Colors",
+        description="Collections with these colors will be treated as containing sets of 'alternate' meshes",
+        options={'ENUM_FLAG'},
+        default={'COLOR_08'}
+    )
+
+    out_dir: bpy.props.StringProperty(subtype='DIR_PATH')
+
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
+    def execute(self, context):
+        out_dir = self.out_dir
+        out_dict = {}
+        for file in self.files:
+            fpath = os.path.join(self.directory, file.name)
+            bpy.ops.wm.open_mainfile('EXEC_DEFAULT', True, filepath=fpath)
+
+            main_collections = []
+            alt_collections = []
+    
+            for layer_collection in bpy.context.view_layer.layer_collection.children:
+                collection = layer_collection.collection
+
+                if collection.color_tag in self.main_colors:
+                    main_collections.append(layer_collection)
+
+                if collection.color_tag in self.alt_colors:
+                    alt_collections.append(layer_collection)
+
+            for collection in main_collections:
+                ship = out_dict[collection.collection.name] = {}
+                ship['display_name'] = "Timmothy"
+                ship["components"] = {}
+
+                for obj in collection.collection.objects:
+                    component = ship['components'][obj.name] = {}
+                    component['loc'] = obj.location.to_tuple()
+                    quat = obj.matrix_world.to_quaternion()
+                    quat_tup = (quat.x, quat.y, quat.z, quat.w)
+                    component['rot'] = quat_tup
+
+                    bpy.ops.object.select_all(action='DESELECT')
+                    obj.select_set(True)
+                    mod = obj.modifiers.new("triangulate", 'TRIANGULATE')
+
+                    if mod:
+                        mod.keep_custom_normals = True
+                    else:
+                        continue #Lazy way to skip non-mesh objects. Fragile.
+
+                    backup_mat = obj.matrix_world.copy()
+                    export_mat = mathutils.Matrix.Identity(4)
+                    obj.matrix_world = export_mat
+
+                    print(f"output directory = {out_dir}")                    
+                    export_path = os.path.join(out_dir, (obj.name + ".fbx"))
+                    print(export_path)
+
+                    context.view_layer.depsgraph.update()
+
+                    bpy.ops.export_scene.fbx(
+                        filepath=export_path,
+                        check_existing=False, #Auto-overwrite
+                        filter_glob='*.fbx',
+
+                        use_selection=True,
+                        use_active_collection=True,
+                        object_types={'EMPTY', 'MESH', 'OTHER'}, # So we can use empties as sockets/locators
+
+                        apply_unit_scale=False,
+                        apply_scale_options='FBX_SCALE_UNITS',
+                        use_space_transform=True,
+
+                        use_mesh_modifiers=True,
+                        # use_mesh_modifiers_render=True, # Turns out this one doesn't do anything anymore.
+                        mesh_smooth_type='FACE',
+
+                        batch_mode='OFF', # Batches are created manually
+
+                        axis_forward='Y',
+                        axis_up='Z',
+                        bake_space_transform=False
+                    )
+
+                    obj.matrix_world = backup_mat
+                    obj.modifiers.remove(mod)
+        
+        data_path = os.path.join(out_dir, "export_data.json")
+        with open(data_path, 'w') as outfile:
+            json.dump(out_dict, outfile, indent=4)
 
         return {'FINISHED'}
