@@ -574,3 +574,35 @@ class PIPELINER_OT_MeshExport(bpy.types.Operator):
                 target.matrix_world = backup
 
         return {'FINISHED'}
+
+
+class PIPELINER_OT_UVSetup(bpy.types.Operator):
+    bl_idname = "pipe.uv_setup"
+    bl_label = "Pipeliner: UV Setup"
+    bl_description = "Bulk adds and names UV channels"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    uv1_name: bpy.props.StringProperty(
+        name="UV 1 Name",
+        description="Name for the first UV layer",
+        default="UV1"
+    )
+
+    uv2_name: bpy.props.StringProperty(
+        name="UV 2 Name",
+        description="Name for the Second UV layer",
+        default="UV2"
+    )
+
+    def execute(self, context):
+        targets = [obj for obj in context.selected_editable_objects if obj.type == 'MESH']
+        for obj in targets:
+            layers = obj.data.uv_layers
+
+            if len(layers) > 1:
+                continue
+
+            layers[0].name = self.uv1_name
+            layers.new(name=self.uv2_name, do_init=True)
+
+        return {'FINISHED'}
