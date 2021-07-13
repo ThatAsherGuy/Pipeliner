@@ -14,6 +14,7 @@
 # Hell is other people's code
 
 import bpy
+from .preferences import get_prefs
 
 class View3dPanel:
     bl_space_type = 'VIEW_3D'
@@ -52,14 +53,23 @@ class PL_PT_MainPanel(View3dPanel, bpy.types.Panel):
 
         op = row.operator(
             "pipe.mesh_export",
-            text=" Auto Export"
+            text="Auto Export"
         )
         op.export_mode = 'AUTO'
 
-        # root.prop(op, "export_mode", expand=True)
+        root.separator(factor=2.0)
 
-        # root.prop(op, "export_target", expand =True)
-        
+        op = root.operator(
+            "pipe.bulk_export",
+            text="Bulk Export"
+        )
+        root.prop(op, 'out_dir', text="")
+
+        root.separator(factor=1.0)
+
+        prefs = get_prefs()
+        root.label(text="Default Export Directory")
+        root.prop(prefs, "default_dir", text="")
 
 
 def draw_export_overrides(context, layout, target):
@@ -110,7 +120,6 @@ def draw_export_overrides(context, layout, target):
         col.separator(factor=2.0)
 
 
-
 class PL_PT_ExportPanel(View3dPanel, bpy.types.Panel):
     bl_idname = "PL_PT_ExportPanel"
     bl_label = "Object Export Overrides"
@@ -135,31 +144,27 @@ class PL_PT_ExportPanel(View3dPanel, bpy.types.Panel):
         draw_export_overrides(context, root, obj)
 
 
-class PL_PT_CollectionOverrides(OverridePanel, bpy.types.Panel):
-    bl_idname = "PL_PT_CollectionOverrides"
-    bl_label = "Colllection Export Overrides"
-
-    @classmethod
-    def poll(cls, context):
-        if context.view_layer.active_layer_collection:
-            return True
+class PL_PT_CollectionExtras(bpy.types.Panel):
+    bl_space_type = 'PROPERTIES'
+    bl_region_type = 'WINDOW'
+    bl_context = "collection"
+    bl_idname = "PL_PT_CollectionExtras"
+    bl_label = "Pipeliner Collection Settings"
 
     def draw(self, context):
-        collection = context.view_layer.active_layer_collection.collection
-        exp = collection.PIPE
+        layout = self.layout
 
-        root = self.layout.column(align=True)
-        root.label(text="Collection Settings")
+        collection = context.collection
 
-        col = root.column(align=True)
-        col.use_property_split = True
-        col.use_property_decorate = False
+        root = layout.column(align=True)
+        root.use_property_split = True
+        root.use_property_decorate = False
 
-        col.prop(collection, "name")
-        col.prop(exp, "export_mode")
+        row = root.row(align=True)
+        row.prop(collection, "name", text="Collection Name")
+        row.prop(collection, 'color_tag', expand=False, icon_only=True)
+        root.prop(collection.PIPE_extras, "display_name")
 
         root.separator(factor=2.0)
 
         draw_export_overrides(context, root, context.view_layer.active_layer_collection.collection)
-
-

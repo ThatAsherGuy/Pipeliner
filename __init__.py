@@ -36,12 +36,17 @@ from .operators import PIPELINER_OT_UVSetup
 from .properties import PIPELINER_File
 from .properties import PIPELINER_TaskProps
 from .properties import PIPELINER_ExportProps
+from .properties import PIPELINER_CollectionExtras
 
 from .interface import PL_PT_MainPanel
 from .interface import PL_PT_ExportPanel
-from .interface import PL_PT_CollectionOverrides
+from .interface import PL_PT_CollectionExtras
+
+from . preferences import PipelinerAddonPrefs
 
 classes = (
+    # Preferences
+    PipelinerAddonPrefs,
     # Ops
     PIPELINER_OT_SetDimensions,
     PIPELINER_OT_ChurnNext,
@@ -53,10 +58,11 @@ classes = (
     PIPELINER_File,
     PIPELINER_TaskProps,
     PIPELINER_ExportProps,
+    PIPELINER_CollectionExtras,
     # UI
     PL_PT_MainPanel,
     PL_PT_ExportPanel,
-    PL_PT_CollectionOverrides
+    PL_PT_CollectionExtras,
 )
 
 def register():
@@ -66,12 +72,14 @@ def register():
     bpy.types.Scene.PIPE = bpy.props.PointerProperty(type=PIPELINER_TaskProps)
     bpy.types.Object.PIPE = bpy.props.PointerProperty(type=PIPELINER_ExportProps)
     bpy.types.Collection.PIPE = bpy.props.PointerProperty(type=PIPELINER_ExportProps)
+    bpy.types.Collection.PIPE_extras = bpy.props.PointerProperty(type=PIPELINER_CollectionExtras)
 
 def unregister():
 
     del bpy.types.Scene.PIPE
     del bpy.types.Object.PIPE
     del bpy.types.Collection.PIPE
+    del bpy.types.Collection.PIPE_extras
 
     for cls in classes:
         bpy.utils.unregister_class(cls)

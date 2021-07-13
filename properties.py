@@ -14,6 +14,7 @@
 # Hell is other people's code
 
 import bpy
+from bpy.path import display_name
 from bpy.types import PropertyGroup
 
 class PIPELINER_File(PropertyGroup):
@@ -169,4 +170,12 @@ class PIPELINER_ExportProps(PropertyGroup):
         name="Up Axis",
         description="",
         default='POS_Z'
+    )
+
+class PIPELINER_CollectionExtras(PropertyGroup):
+
+    display_name: bpy.props.StringProperty(
+        name="Display Name",
+        description="The user-facing name for this asset",
+        default="NULL"
     )
