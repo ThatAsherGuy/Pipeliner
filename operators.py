@@ -660,7 +660,7 @@ class PIPELINER_OT_BulkExport(bpy.types.Operator):
         name="Collider Collection Colors",
         description="Collection color for collections with collider geometry",
         options={'ENUM_FLAG'},
-        default={'NONE'}
+        default={'COLOR_04'}
     )
 
     manifest_only: bpy.props.BoolProperty(
@@ -701,60 +701,38 @@ class PIPELINER_OT_BulkExport(bpy.types.Operator):
                 if collection.color_tag in self.alt_colors:
                     alt_collections.append(layer_collection)
 
+                # for child in layer_collection.children:
+                #     c_collection = child.collection
+
+                #     if c_collection.color_tag in self.collider_colors:
+                #         colliders.append(c_collection.objects)
+
             for collection in main_collections:
                 ship = out_dict[collection.collection.name] = {}
                 ship['name'] = collection.collection.name
                 ship['display_name'] = collection.collection.PIPE_extras.display_name
                 ship["components"] = []
+                ship["colliders"] = []
 
+                context.view_layer.active_layer_collection = collection
                 for obj in collection.collection.objects:
                     component = ship['components'].append(obj.name)
 
                     if not self.manifest_only:
-                        bpy.ops.object.select_all(action='DESELECT')
-                        obj.select_set(True)
-                        mod = obj.modifiers.new("triangulate", 'TRIANGULATE')
+                        self.do_export(context, obj)
 
-                        if mod:
-                            mod.keep_custom_normals = True
-                        else:
-                            continue #Lazy way to skip non-mesh objects. Fragile.
+                for child in collection.children:
+                    context.view_layer.active_layer_collection = child
 
-                        backup_mat = obj.matrix_world.copy()
-                        export_mat = mathutils.Matrix.Identity(4)
-                        obj.matrix_world = export_mat
+                    c_col = child.collection
 
-                        export_path = os.path.join(out_dir, (obj.name + ".fbx"))
-                        print(export_path)
+                    if c_col.color_tag in self.collider_colors:
+                        objects = [obj for obj in c_col.objects]
 
-                        context.view_layer.depsgraph.update()
-
-                        bpy.ops.export_scene.fbx(
-                            filepath=export_path,
-                            check_existing=False, #Auto-overwrite
-                            filter_glob='*.fbx',
-
-                            use_selection=True,
-                            use_active_collection=True,
-                            object_types={'EMPTY', 'MESH', 'OTHER'}, # So we can use empties as sockets/locators
-
-                            apply_unit_scale=False,
-                            apply_scale_options='FBX_SCALE_UNITS',
-                            use_space_transform=True,
-
-                            use_mesh_modifiers=True,
-                            # use_mesh_modifiers_render=True, # Turns out this one doesn't do anything anymore.
-                            mesh_smooth_type='FACE',
-
-                            batch_mode='OFF', # Batches are created manually
-
-                            axis_forward='Y',
-                            axis_up='Z',
-                            bake_space_transform=False
-                        )
-
-                        obj.matrix_world = backup_mat
-                        obj.modifiers.remove(mod)
+                        for obj in objects:
+                            col = ship['colliders'].append(obj.name)
+                            if not self.manifest_only:
+                                self.do_export(context, obj)
         
         for name, data in out_dict.items():
             file_name = (f"manifest_{name}.json")
@@ -764,6 +742,62 @@ class PIPELINER_OT_BulkExport(bpy.types.Operator):
                 json.dump(data, outfile, indent=4)
 
         return {'FINISHED'}
+
+
+    def do_export(self, context, obj):
+        if self.out_dir == "":
+            prefs = get_prefs()
+            out_dir = prefs.default_dir
+        else:
+            out_dir = self.out_dir
+
+        bpy.ops.object.select_all(action='DESELECT')
+        obj.select_set(True)
+        print(obj.name)
+        mod = obj.modifiers.new("triangulate", 'TRIANGULATE')
+
+        if mod:
+            mod.keep_custom_normals = True
+        else:
+            return #Lazy way to skip non-mesh objects. Fragile.
+
+        if len(context.view_layer.objects.selected) < 1:
+            print("WHAT?")
+
+        backup_mat = obj.matrix_world.copy()
+        export_mat = mathutils.Matrix.Identity(4)
+        obj.matrix_world = export_mat
+
+        export_path = os.path.join(out_dir, (obj.name + ".fbx"))
+        context.view_layer.depsgraph.update()
+
+        bpy.ops.export_scene.fbx(
+            filepath=export_path,
+            check_existing=False, #Auto-overwrite
+            filter_glob='*.fbx',
+
+            use_selection=True,
+            use_active_collection=True,
+            object_types={'EMPTY', 'MESH', 'OTHER'}, # So we can use empties as sockets/locators
+
+            apply_unit_scale=False,
+            apply_scale_options='FBX_SCALE_UNITS',
+            use_space_transform=True,
+
+            use_mesh_modifiers=True,
+            # use_mesh_modifiers_render=True, # Turns out this one doesn't do anything anymore.
+            mesh_smooth_type='FACE',
+
+            batch_mode='OFF', # Batches are created manually
+
+            axis_forward='Y',
+            axis_up='Z',
+            bake_space_transform=False
+        )
+
+        obj.matrix_world = backup_mat
+        obj.modifiers.remove(mod)
+
 
     def draw(self, context):
         layout = self.layout
